@@ -29,7 +29,6 @@ async def send(enckey, writer, *, encrypted=True, type=None, **kwargs):
 	else:
 		data=Data(pubkey=enckey.get_public_key(), encrypted=False, type=type, **kwargs)
 
-	print("sent  :", enckey.get_public_key())
 	msg=dumps(data)
 	msg=pack('!Q', len(msg))+msg
 

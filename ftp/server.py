@@ -21,30 +21,12 @@ from os.path import exists, join
 from structures import Data, RSA_Private, EncryptTransmission
 from networking import close, read, send
 from variables import *
-from server_variables import *
+from server_secret.server_variables import *
 
 sessions={}
 
 rsa_prikey=RSA_Private()
-
-def check_and_generate_cert():
-    # create a key pair
-    k = crypto.PKey()
-    k.generate_key(crypto.TYPE_RSA, 1024)
-
-    # create a self-signed cert
-    cert = crypto.X509()
-    cert.get_subject().OU = CERT_NAME
-    cert.get_subject().CN = gethostname()
-    cert.set_serial_number(1000)
-    cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(2**31-1)
-    cert.set_issuer(cert.get_subject())
-    cert.set_pubkey(k)
-    cert.sign(k, 'sha1')
-
-    open(join(CERT_PATH, CERT_FILE), "wb").write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
-    open(join(CERT_PATH, KEY_FILE), "wb").write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+rsa_prikey.generate_RSA_key()
 
 def generate_sessid(min_sessid_len=1):
     sessid=get_random_bytes(min_sessid_len)
@@ -67,23 +49,31 @@ async def handle_connection(reader, writer):
             await error(ErrorCode.INVALID_OPEN_TRANSMISSION, sess_id, reader, writer)
         elif 'sess_id' in data.__dict__ and sess_id!=data.sess_id:
             await error(ErrorCode.INVALID_SESS_ID, sess_id, reader, writer)
-        await handle_packet(data, sess_id, reader, writer)
+        if not (await handle_packet(data, sess_id, reader, writer)):
+            print("Connection terminated with {}".format(sess_id))
+            return
 
 async def handle_packet(data, sess_id, reader, writer):
     if data.type==TransmissionType.OPEN_TRANSMISSION:
         await key_exchange(data, sess_id, reader, writer)
+        return True
     if data.type==TransmissionType.ECHO_TRANSMISSION:
         await echo(data, sess_id, reader, writer)
+        return True
+    if data.type==TransmissionType.END_TRANSMISSION:
+        await bye(data, sess_id, reader, writer)
+        return False
 
 async def key_exchange(data, sess_id, reader, writer):
     #send session id
     await send(sessions[sess_id], writer, encrypted=False, type=TransmissionType.OPEN_TRANSMISSION, sess_id=sess_id)
 
-    print('server:', sessions[sess_id].get_public_key())
-    print('client:', sessions[sess_id].get_encryption_key())
-
 async def echo(data, sess_id, reader, writer):
-    await send(sessions[sess_id], writer, type=TransmissionType.ECHO_TRANSMISSION, **data)
+    await send(sessions[sess_id], writer, type=TransmissionType.ECHO_TRANSMISSION, content=data.content)
+
+async def bye(data, sess_id, reader, writer):
+    del sessions[sess_id]
+    await close(writer)
 
 async def error(errcode, sess_id, reader, writer):
     await send(sessions[sess_id], writer, type=TransmissionType.ERROR, errcode=errcode)
@@ -91,14 +81,13 @@ async def error(errcode, sess_id, reader, writer):
 async def main():
     global rsa_prikey
     #certificate
-    check_and_generate_cert()
     ssl_context=ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ssl_context.check_hostname=False
-    ssl_context.load_cert_chain(join(CERT_PATH, CERT_FILE), join(CERT_PATH, KEY_FILE))
+    ssl_context.load_cert_chain(join(SERV_SECRET, CERT_FILE), join(SERV_SECRET, KEY_FILE))
 
     print("server started")
     #start server
-    server=await asyncio.start_server(handle_connection, HOST_IP, PORT)#, ssl=ssl_context)
+    server=await asyncio.start_server(handle_connection, HOST_IP, PORT, ssl=ssl_context)
 
     async with server:
         await server.serve_forever()

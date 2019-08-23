@@ -22,46 +22,26 @@ class Data:
 		return self.__dict__==other.__dict__
 
 class RSA_Private:
-	def __init__(self, rsa_dec_file='rsa.key', rsa_dec_key=None):
-		self.__rsa_dec_file=rsa_dec_file
-		self.__rsa_dec_key=rsa_dec_key
+	def __init__(self, *, rsa_priv=None):
+		self.__rsa_priv=rsa_priv
 
 	def generate_RSA_key(self):
 		#Generate and save the RSA key.
 		#Server will call this function periodically to update the RSA key.
 		#Client will call this function
-		self.__rsa_dec_key=get_random_bytes(16)
-
-		key=RSA.generate(EncryptTransmission.RSA_BITS)
-		encoded=key.export_key()
+		self.__rsa_priv=RSA.generate(EncryptTransmission.RSA_BITS)
 		
-		cipher=AES.new(self.__rsa_dec_key, AES.MODE_EAX)
-		encrypted, tag=cipher.encrypt_and_digest(encoded)
-		
-		with open(self.__rsa_dec_file, 'wb') as f:
-			f.write(dumps(Data(nonce=cipher.nonce, tag=tag, enc_rsa_key=encrypted)))
+	def get_private_key(self):
+		return self.__rsa_priv
 
 	def get_public_key(self):
-		rsa_prikey=self.get_private_key()
-		return rsa_prikey.publickey().export_key()
-
-	def __read_from_key_file(self):
-		encrypted=loads(open(self.__rsa_dec_file, 'rb').read())
-		cipher=AES.new(self.__rsa_dec_key, AES.MODE_EAX, nonce=encrypted.nonce)
-		encoded=cipher.decrypt_and_verify(encrypted.enc_rsa_key, encrypted.tag)
-		return RSA.import_key(encoded)
-
-	def get_private_key(self):
-		try:
-			return self.__read_from_key_file()
-		except Exception as e:
-			print(e, ', regenerating key...', sep='')
-			self.generate_RSA_key()
-			return self.__read_from_key_file()
+		return self.__rsa_priv.publickey().export_key()
 
 class EncryptTransmission:
 	PRESET=b'\xff'*16
 	RSA_BITS=2048
+	ENCRYPT=True
+	DECRYPT=False
 	def __init__(self, *, enc_sesskey=None, enc_data=None,
 		         sesskey=PRESET, old_sesskey=None, data=None,
 		         rsa_dec=None, rsa_dec_file='rsa.key',rsa_dec_key=None,
@@ -80,12 +60,15 @@ class EncryptTransmission:
 
 		#Owned key
 		if rsa_dec==None:
-			self.__rsa_dec=RSA_Private(rsa_dec_file=rsa_dec_file, rsa_dec_key=rsa_dec_key)
+			self.__rsa_dec=RSA_Private()
 		else:
 			self.__rsa_dec=rsa_dec
+		self.__rsa_pub=None
 
 		#Other's key
 		self.__rsa_enc=None
+
+		self.last_action=None
 
 	def copy(self):
 		return EncryptTransmission(
@@ -100,9 +83,12 @@ class EncryptTransmission:
 
 	def generate_RSA_key(self):
 		self.__rsa_dec.generate_RSA_key()
+		self.__rsa_pub=self.__rsa_dec.get_public_key()
 
 	def get_public_key(self):
-		return self.__rsa_dec.get_public_key()
+		if self.__rsa_pub==None:
+			self.__rsa_pub=self.__rsa_dec.get_public_key()
+		return self.__rsa_pub
 
 	def get_private_key(self):
 		return self.__rsa_dec.get_private_key()
@@ -142,15 +128,19 @@ class EncryptTransmission:
 		except:
 			raise DataNotFound("Data has not been found")
 
-		self.update_sesskey()
+		if self.last_action!=EncryptTransmission.ENCRYPT:
+			self.update_sesskey()
 
 		#session key encryption
-		self.__enc_sesskey=PKCS1_OAEP.new(self.get_encryption_key()).encrypt(self.__old_sesskey+self.__sesskey)
+		key=RSA.import_key(self.get_encryption_key())
+		rsa=PKCS1_OAEP.new(key)
+		self.__enc_sesskey=rsa.encrypt(self.__old_sesskey+self.__sesskey)
 
 		#data encryption
 		cipher=AES.new(self.__sesskey, AES.MODE_EAX)
 		ciphertext, tag=cipher.encrypt_and_digest(self.__data)
-		self.__enc_data=Data(nonce=cipher.nonce, ciphertext=ciphertext)
+		self.__enc_data=Data(nonce=cipher.nonce, ciphertext=ciphertext, tag=tag)
+		self.last_action=EncryptTransmission.ENCRYPT
 
 	def decrypt(self):
 		#error handling
@@ -162,16 +152,23 @@ class EncryptTransmission:
 		#session key decryption
 		concatkey=PKCS1_OAEP.new(self.get_private_key()).decrypt(self.__enc_sesskey)
 		try:
-			assert self.__sesskey==concatkey[:16] or self.__old_sesskey==None
+			if self.last_action==None:
+				self.__old_sesskey==None
+			elif self.last_action==EncryptTransmission.ENCRYPT:
+				assert self.__sesskey==concatkey[:16] or self.__old_sesskey==None
+			else:
+				assert self.__old_sesskey==concatkey[:16]
 		except:
 			raise IntegrityCompromised("session key does not match")
 
-		self.update_sesskey()
+		if self.last_action!=EncryptTransmission.DECRYPT:
+			self.update_sesskey()
 		self.__sesskey=concatkey[16:]
 
 		#data decryption
 		cipher=AES.new(self.__sesskey, AES.MODE_EAX, nonce=self.__enc_data.nonce)
 		self.__data=cipher.decrypt_and_verify(self.__enc_data.ciphertext, self.__enc_data.tag)
+		self.last_action=EncryptTransmission.DECRYPT
 
 	def transmission_data(self):
 		#get the pickled data object that will be transmitted.
@@ -185,11 +182,12 @@ class EncryptTransmission:
 
 if __name__ == '__main__':
 	def main(iteration=10):
-		client=EncryptTransmission(rsa_dec_file='server.key')
-		server=EncryptTransmission(rsa_dec_file='client.key')
+		client=EncryptTransmission()
+		server=EncryptTransmission()
 
-		#server.generate_RSA_key()
-		#client.generate_RSA_key()
+		server.generate_RSA_key()
+		client.generate_RSA_key()
+
 		server.set_encryption_key(client.get_public_key())
 		client.set_encryption_key(server.get_public_key())
 		print("key exchange complete")
@@ -197,20 +195,24 @@ if __name__ == '__main__':
 		for i in range(iteration):
 			client.set_data(what='the',hell=15,going=b'\x00\n')
 			client.encrypt()
+			client.encrypt()
 
 			result=client.transmission_data()
 
 			server.assign_transmission(result)
+			server.decrypt()
 			server.decrypt()
 
 			assert (client.get_data())==(server.get_data())
 
 			server.set_data(some='thing',bad=15,going=b'\x00n')
 			server.encrypt()
+			server.encrypt()
 
 			result=server.transmission_data()
 
 			client.assign_transmission(result)
+			client.decrypt()
 			client.decrypt()
 
 			assert (client.get_data())==(server.get_data())

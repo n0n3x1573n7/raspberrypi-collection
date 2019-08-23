@@ -1,19 +1,26 @@
-from enum import Enum
+from enum import Enum, unique, auto
 
 #shared variables for network
 HOST_IP="127.0.0.1"
 PORT=8080
 
+class AutoName(Enum):
+	def _generate_next_value_(name, start, count, last_values):
+		return name
+
 #message types
-class TransmissionType(Enum):
-	ERROR=-1
-	OPEN_TRANSMISSION=0
-	ECHO_TRANSMISSION=1
-	DATA_TRANSMISSION=2
+@unique
+class TransmissionType(AutoName):
+	ERROR=auto()
+	OPEN_TRANSMISSION=auto()
+	ECHO_TRANSMISSION=auto()
+	DATA_TRANSMISSION=auto()
+	END_TRANSMISSION=auto()
 
 #error codes
-class ErrorCode(Enum):
-	INVALID_OPEN_TRANSMISSION=0
-	INVALID_KEY=1
-	INVALID_SESS_ID=2
-	INTEGRITY_COMPROMISED=3
+@unique
+class ErrorCode(AutoName):
+	INVALID_OPEN_TRANSMISSION=auto()
+	INVALID_KEY=auto()
+	INVALID_SESS_ID=auto()
+	INTEGRITY_COMPROMISED=auto()
