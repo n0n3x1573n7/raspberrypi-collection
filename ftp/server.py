@@ -18,9 +18,10 @@ b64=lambda x:b64encode(x).decode('utf-8')
 
 from os.path import exists, join
 
-from structures import Data, RSA_Private, EncryptTransmission
-from networking import close, read, send
-from variables import *
+from commands.modules.structures import Data, RSA_Private, EncryptTransmission
+from commands.modules.networking import close, read, send
+from commands.modules.import_command import import_with_path
+from commands.modules.variables import *
 from server_secret.server_variables import *
 
 sessions={}
@@ -57,26 +58,22 @@ async def handle_packet(data, sess_id, reader, writer):
     if data.type==TransmissionType.OPEN_TRANSMISSION:
         await key_exchange(data, sess_id, reader, writer)
         return True
-    if data.type==TransmissionType.ECHO_TRANSMISSION:
-        await echo(data, sess_id, reader, writer)
+    if data.type==TransmissionType.COMMAND:
+        func=import_with_path(data.command, 'r')
+        await func(data, reader, writer, sessions, sess_id)
         return True
     if data.type==TransmissionType.END_TRANSMISSION:
-        await bye(data, sess_id, reader, writer)
-        return False
+        bye=import_with_path('bye', 'r')
+        await bye(data, reader, writer, sessions, sess_id)
+        return False   
 
 async def key_exchange(data, sess_id, reader, writer):
     #send session id
     await send(sessions[sess_id], writer, encrypted=False, type=TransmissionType.OPEN_TRANSMISSION, sess_id=sess_id)
 
-async def echo(data, sess_id, reader, writer):
-    await send(sessions[sess_id], writer, type=TransmissionType.ECHO_TRANSMISSION, content=data.content)
-
-async def bye(data, sess_id, reader, writer):
-    del sessions[sess_id]
-    await close(writer)
-
 async def error(errcode, sess_id, reader, writer):
-    await send(sessions[sess_id], writer, type=TransmissionType.ERROR, errcode=errcode)
+    msg=
+    await send(sessions[sess_id], writer, type=TransmissionType.ERROR, response=errcode)
 
 async def main():
     global rsa_prikey

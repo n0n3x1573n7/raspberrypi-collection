@@ -13,8 +13,7 @@ class AutoName(Enum):
 class TransmissionType(AutoName):
 	ERROR=auto()
 	OPEN_TRANSMISSION=auto()
-	ECHO_TRANSMISSION=auto()
-	DATA_TRANSMISSION=auto()
+	COMMAND=auto()
 	END_TRANSMISSION=auto()
 
 #error codes

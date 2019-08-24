@@ -12,19 +12,30 @@ from struct import pack, unpack
 from base64 import b64encode
 b64=lambda x:b64encode(x).decode('utf-8')
 
+from os import remove
 from os.path import exists, join
 
 import atexit
 
-from structures import Data, EncryptTransmission
-from networking import close, read, send
-from variables import *
+from commands.modules.structures import Data, EncryptTransmission
+from commands.modules.networking import close, read, send
+from commands.modules.import_command import import_with_path
+from commands.modules.variables import *
 from client_secret.client_variables import *
 
 enc_conn=EncryptTransmission()
 enc_conn.generate_RSA_key()
+print('keygen completed')
 
 sessid=None
+
+def gencert():
+    cert=b'-----BEGIN CERTIFICATE-----\nMIIB9DCCAV0CAgPoMA0GCSqGSIb3DQEBBQUAMEExJTAjBgNVBAsMHEZUUCBzZXJ2\nZXIgZm9yIHJhc3BiZXJyeXBpIDQxGDAWBgNVBAMMD0RFU0tUT1AtUDI5TTNWNDAg\nFw0xOTA4MjMxNjAzMjJaGA8yMDg3MDkxMDE5MTcyOVowQTElMCMGA1UECwwcRlRQ\nIHNlcnZlciBmb3IgcmFzcGJlcnJ5cGkgNDEYMBYGA1UEAwwPREVTS1RPUC1QMjlN\nM1Y0MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDioiLon6/9lklDYW8CSjmS\nmx4bWVs98Bk52mK9mozZMwj5v/cjYVGvWmH1RyErK9JAE+7DFNCa7VVaFV9xOiKF\npIbR+JiymiC6ScNi6Y3o/cXBbMtgEU0vnuWViEtl9IXIAu3mLW+hvdaRy4tXDaj+\nlssVqjRmqdK80sCd51FuSQIDAQABMA0GCSqGSIb3DQEBBQUAA4GBAALyo2oYEquU\ngbW716m4QaSs7dpvLcPmexsmeotAFLgOV8N+/8f64lFxg8QQUI27cByPyHd8/wGA\nHK++LFIp1W8XvEF/cJjshlzsPbI7QIUgySaKZHdaFkzWUGv9oCXWWGWCGusDuSYT\nUem25pwbc4QO2IaAe/5E8BImYf2n5MCx\n-----END CERTIFICATE-----\n'
+    with open(join(CLI_SECRET, CERT_FILE), 'wb') as f:
+        f.write(cert)
+
+def delcert():
+    remove(join(CLI_SECRET, CERT_FILE))
 
 async def key_exchange(reader, writer):
     global sessid
@@ -37,19 +48,24 @@ async def key_exchange(reader, writer):
     sessid=data.sess_id
     return sessid
 
-async def echo(txt, reader, writer):
-    global sessid
-
-    await send(enc_conn, writer, type=TransmissionType.ECHO_TRANSMISSION, sess_id=sessid, content=txt)
-    data=await read(enc_conn, reader)
-
-    return data
-
-async def bye(reader, writer):
-    await send(enc_conn, writer, type=TransmissionType.END_TRANSMISSION, sess_id=sessid)
-    await close(writer)
+async def parse_command(cmd, reader, writer):
+    tmp=cmd.split(' ')
+    if len(tmp)<2:
+        return Data(response="")
+    loc=tmp[0]
+    cmd=tmp[1]
+    txt=' '.join(tmp[2:])
+    try:
+        return (await import_with_path(cmd, loc[0])(txt, reader, writer, enc_conn, sessid))
+    except Exception as e:
+        raise e
+        print("Command {} unrecognized".format(cmd))
+        return Data(response="")
 
 async def main():
+    gencert()
+    atexit.register(delcert)
+
     ssl_context=ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     ssl_context.check_hostname=False
     ssl_context.load_verify_locations(join(CLI_SECRET, CERT_FILE))
@@ -63,21 +79,18 @@ async def main():
         except ConnectionRefusedError:
             await asyncio.sleep(0.5)
 
-    atexit.register(lambda: asyncio.get_event_loop().run_until_complete(bye(reader, writer)))
-
     sessid=await key_exchange(reader, writer)
     print('key exchange completed')
 
-    while True:
-        txt=input(">> ")
-        if txt=='bye':
-            await bye(reader, writer) 
-            break
-        x=await echo(txt, reader, writer)
-        print(x)
+    atexit.register(lambda: asyncio.get_event_loop().run_until_complete(import_with_path('bye', 's')("", reader, writer, enc_conn, sessid)))
 
-async def parse_command(cmd, reader, writer):
-    pass
+    while True:
+        cmd=input(">> ")
+        res=await parse_command(cmd, reader, writer)
+        if 'action' in res.__dict__ and res.action=="return":
+            return
+        #TODO: show when error occurrs.
+        print(res.response)
 
 if __name__ == '__main__':
     asyncio.get_event_loop().run_until_complete(main())

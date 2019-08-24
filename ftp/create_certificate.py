@@ -4,7 +4,7 @@ from socket import gethostname
 
 from os.path import exists, join
 
-from variables import *
+from commands.modules.variables import *
 from server_secret.server_variables import *
 from client_secret.client_variables import *
 

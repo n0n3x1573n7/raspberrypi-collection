@@ -8,8 +8,8 @@ from struct import pack, unpack
 from base64 import b64encode
 b64=lambda x:b64encode(x).decode('utf-8')
 
-from structures import Data, EncryptTransmission
-from variables import *
+from commands.modules.structures import Data, EncryptTransmission
+from commands.modules.variables import *
 
 class NoTypeDeclared(Exception): pass
 
