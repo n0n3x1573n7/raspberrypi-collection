@@ -23,3 +23,9 @@ class ErrorCode(AutoName):
 	INVALID_KEY=auto()
 	INVALID_SESS_ID=auto()
 	INTEGRITY_COMPROMISED=auto()
+
+#command import mode
+@unique
+class ImportMode(AutoName):
+	CLIENT=auto()
+	SERVER=auto()

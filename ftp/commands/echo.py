@@ -10,11 +10,14 @@ async def sent_conn(txt, reader, writer, enc_conn, sessid):
 	data=await read(enc_conn, reader)
 	return data
 
-async def read_conn(data, reader, writer, sessions, sessid):
-	await send(sessions[sessid], writer, type=TransmissionType.COMMAND, command='echo', response=data.content)
+async def parse_client(txt, reader, writer, enc_conn, sessid):
+	location=txt.split(' ')[0]
+	text=' '.join(txt.split(' ')[1:])
+	if location in ['local', 'l']:
+		return await local(text, reader, writer, enc_conn, sessid)
+	else:
+		return await sent_conn(txt, reader, writer, enc_conn, sessid)
 
-func={
-	'l':local,
-	's':sent_conn,
-	'r':read_conn,
-}
+
+async def parse_server(data, reader, writer, sessions, sessid):
+	await send(sessions[sessid], writer, type=TransmissionType.COMMAND, command='echo', response=data.content)
