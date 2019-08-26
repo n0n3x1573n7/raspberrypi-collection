@@ -18,6 +18,5 @@ async def parse_client(txt, reader, writer, enc_conn, sessid):
 	else:
 		return await sent_conn(txt, reader, writer, enc_conn, sessid)
 
-
 async def parse_server(data, reader, writer, sessions, sessid):
 	await send(sessions[sessid], writer, type=TransmissionType.COMMAND, command='echo', response=data.content)

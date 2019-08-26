@@ -70,6 +70,25 @@ class EncryptTransmission:
 
 		self.last_action=None
 
+		self.__userid=None
+		self.__passwd=None
+
+	def get_login_info(self):
+		return self.__userid
+
+	def set_login_info(self, userid, passwd):
+		self.__userid=userid
+		self.__passwd=passwd
+		self.update_data(userid=userid, passwd=passwd)
+
+	def delete_login_info(self):
+		self.__userid=None
+		self.__passwd=None
+		d=self.get_data()
+		del d.__dict__['userid']
+		del d.__dict__['passwd']
+		self.set_data(**d.__dict__)
+
 	def copy(self):
 		return EncryptTransmission(
 			   enc_sesskey=self.__enc_sesskey,

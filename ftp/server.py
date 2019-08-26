@@ -63,12 +63,13 @@ async def handle_packet(data, sess_id, reader, writer):
             func=import_with_path(data.command, ImportMode.SERVER)
             await func(data, reader, writer, sessions, sess_id)
             return True
-        except:
-            await error()
+        except Exception as e:
+            await error("Error: {}".format(str(e)), sess_id, reader, writer)
+            return True
     if data.type==TransmissionType.END_TRANSMISSION:
         bye=import_with_path('bye', ImportMode.SERVER)
         await bye(data, reader, writer, sessions, sess_id)
-        return False   
+        return False
 
 async def key_exchange(data, sess_id, reader, writer):
     #send session id
