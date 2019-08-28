@@ -2,12 +2,11 @@ from commands.modules.structures import Data
 from commands.modules.networking import send, read, close
 from commands.modules.variables import TransmissionType
 from commands.modules.account import Account
-from commands.modules.filesys import File, Directory
 
 from getpass import getpass
 
 async def parse_client(txt, reader, writer, enc_conn, sessid):
-	userid=input("Enter ID:")
+	userid=input("Enter ID:").lower()
 	passwd=getpass("Enter PW:").encode()
 	await send(enc_conn, writer, type=TransmissionType.COMMAND, command='register', sess_id=sessid, userid=userid, passwd=passwd)
 	return await read(enc_conn, reader)

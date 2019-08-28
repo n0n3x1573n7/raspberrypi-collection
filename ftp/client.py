@@ -55,6 +55,7 @@ async def parse_command(cmd, reader, writer):
     try:
         return (await import_with_path(cmd, ImportMode.CLIENT)(txt, reader, writer, enc_conn, sessid))
     except Exception as e:
+        print(e)
         return Data(type=TransmissionType.ERROR,response="Command {} unrecognized".format(cmd))
 
 async def main():

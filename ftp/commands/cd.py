@@ -14,20 +14,28 @@ async def parse_client(txt, reader, writer, enc_conn, sessid):
 	if loc not in loc_client+loc_server:
 		path=loc+' '+path if path else loc
 		loc=''
+	if path=='':
+		if loc in loc_client:
+			return Data(type=TransmissionType.COMMAND, response=get_local_cwd())
+		else:
+			return Data(type=TransmissionType.COMMAND, response=get_server_cwd())
 	if loc in loc_client:
 		loc_path=parse_path_to_list(path, local=True)
-		loc_path=sep.join(loc_path)
-		if not isdir(loc_path):
+		loc_path_str=sep.join(loc_path)
+		if not isdir(loc_path_str):
 			return Data(type=TransmissionType.ERROR, response="Path does not exist")
-		res=ls(loc_path)
-		return Data(type=TransmissionType.COMMAND, response='\n'.join([*map(lambda x:'D:'+x,res['dir'])]+[*map(lambda x:'F:'+x,res['file'])]))
+		set_local_cwd_from_list(loc_path)
+		return Data(type=TransmissionType.COMMAND, response="Path change complete")
 	else:
 		if not enc_conn.is_logged_in():
 			return Data(type=TransmissionType.COMMAND, response="Not logged in")
 		loc_path=parse_path_to_list(path, local=False)
-		await send(enc_conn, writer, type=TransmissionType.COMMAND, command='ls', sess_id=sessid, path=loc_path, **enc_conn.get_login_info())
-		return await read(enc_conn, reader)
+		await send(enc_conn, writer, type=TransmissionType.COMMAND, command='cd', sess_id=sessid, path=loc_path, **enc_conn.get_login_info())
+		res=await read(enc_conn, reader)
+		if res.result:
+			set_server_cwd_from_list(loc_path)
+		return res
 
 async def parse_server(data, reader, writer, sessions, sessid):
-	res=Account(data.username).list_path(data.passwd, join(*data.path))
-	await send(sessions[sessid], writer, type=TransmissionType.COMMAND, command='ls', response='\n'.join([*map(lambda x:'D:'+x,res['dir'])]+[*map(lambda x:'F:'+x,res['file'])]))
+	res=Account(data.username).check_directory(data.passwd, join(*data.path))
+	await send(sessions[sessid], writer, type=TransmissionType.COMMAND, command='cd', result=res, response=["Path does not exist","Path change complete"][res])

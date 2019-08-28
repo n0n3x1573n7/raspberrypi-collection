@@ -73,8 +73,11 @@ class EncryptTransmission:
 		self.__userid=None
 		self.__passwd=None
 
+	def is_logged_in(self):
+		return self.__userid!=None
+
 	def get_login_info(self):
-		return self.__userid
+		return {'username':self.__userid, 'passwd':self.__passwd}
 
 	def set_login_info(self, userid, passwd):
 		self.__userid=userid

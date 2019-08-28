@@ -4,6 +4,10 @@ from enum import Enum, unique, auto
 HOST_IP="127.0.0.1"
 PORT=8080
 
+#location strings
+loc_client=['local','l']
+loc_server=[]
+
 class AutoName(Enum):
 	def _generate_next_value_(name, start, count, last_values):
 		return name

@@ -45,7 +45,11 @@ async def handle_connection(reader, writer):
     sessions[sess_id]=EncryptTransmission(rsa_dec=rsa_prikey)
     
     while True:
-        data=await read(sessions[sess_id], reader)
+        try:
+            data=await read(sessions[sess_id], reader)
+            print(data)
+        except:
+            await error("Session key does not match; restart connection", sess_id, reader, writer)
         if 'sess_id' not in data.__dict__ and data.type!=TransmissionType.OPEN_TRANSMISSION:
             await error("No session id found", sess_id, reader, writer)
         elif 'sess_id' in data.__dict__ and sess_id!=data.sess_id:
@@ -64,7 +68,7 @@ async def handle_packet(data, sess_id, reader, writer):
             await func(data, reader, writer, sessions, sess_id)
             return True
         except Exception as e:
-            await error("Error: {}".format(str(e)), sess_id, reader, writer)
+            await error("{}".format(str(e)), sess_id, reader, writer)
             return True
     if data.type==TransmissionType.END_TRANSMISSION:
         bye=import_with_path('bye', ImportMode.SERVER)
